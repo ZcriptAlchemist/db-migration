@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	sourceDB      = "user=flipopay password=flipopay@123 dbname=unbadged-db host=localhost port=5433 sslmode=disable"
-	destinationDB = "user=zeuz password='zeuz@123' dbname=pg host=localhost port=5434 sslmode=disable"
+	sourceDB      = ""
+	destinationDB = ""
 	jobs          = "4" // Number of parallel jobs for performance
 )
 
