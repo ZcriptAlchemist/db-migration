@@ -1,0 +1,15 @@
+services:
+  psql_pg:
+    image: postgres:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "pg"
+      POSTGRES_USER: "zeuz"
+      POSTGRES_PASSWORD: "zeuz@123"
+    ports:
+      - "5434:5432"
+    volumes:
+      - psql_volume_pg:/var/lib/postgresql/data
+
+volumes:
+  psql_volume_pg:
