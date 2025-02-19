@@ -167,22 +167,35 @@ func dumpData(dumpDir string) error {
 			return fmt.Errorf("failed to recreate backup directory: %v", err)
 		}
 	}
-	cmd := exec.Command("pg_dump", "--format=directory", "--no-owner", "--no-acl", "--data-only", "--jobs="+jobs, "--dbname="+sourceDB, "--file="+dumpDir)
+	cmd := exec.Command("pg_dump", "--format=directory", "--no-owner", "--no-acl", "--data-only", "--disable-triggers", "--jobs="+jobs, "--dbname="+sourceDB, "--file="+dumpDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// ✅ Step 8: Restore Data
+// ✅ Step 8: Restore Data Safely
 func restoreDataWithTransaction(dumpDir string) error {
 	log.Println("🛠️ Restoring data within a transaction...")
+
+	startTx := exec.Command("psql", destinationDB, "-c", "BEGIN;")
+	startTx.Stdout = os.Stdout
+	startTx.Stderr = os.Stderr
+	if err := startTx.Run(); err != nil {
+		return fmt.Errorf("failed to start transaction: %v", err)
+	}
+
 	restoreCmd := exec.Command("pg_restore", "--disable-triggers", "--jobs="+jobs, "--no-owner", "--no-acl", "--data-only", "--dbname="+destinationDB, dumpDir)
 	restoreCmd.Stdout = os.Stdout
 	restoreCmd.Stderr = os.Stderr
 	if err := restoreCmd.Run(); err != nil {
+		exec.Command("psql", destinationDB, "-c", "ROLLBACK;").Run()
 		return fmt.Errorf("data restore failed: %v", err)
 	}
-	return nil
+
+	commitTx := exec.Command("psql", destinationDB, "-c", "COMMIT;")
+	commitTx.Stdout = os.Stdout
+	commitTx.Stderr = os.Stderr
+	return commitTx.Run()
 }
 
 // ✅ Step 9: Re-enable Constraints
