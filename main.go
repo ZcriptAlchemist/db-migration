@@ -157,6 +157,16 @@ func disableConstraints() error {
 // ✅ Step 7: Dump Data
 func dumpData(dumpDir string) error {
 	log.Println("📦 Dumping data only...")
+	// Ensure backup directory is fresh before dumping data
+	if _, err := os.Stat(dumpDir); !os.IsNotExist(err) {
+		log.Println("🗑️ Removing existing backup directory before dumping data...")
+		if err := os.RemoveAll(dumpDir); err != nil {
+			return fmt.Errorf("failed to remove backup directory: %v", err)
+		}
+		if err := os.MkdirAll(dumpDir, 0755); err != nil {
+			return fmt.Errorf("failed to recreate backup directory: %v", err)
+		}
+	}
 	cmd := exec.Command("pg_dump", "--format=directory", "--no-owner", "--no-acl", "--data-only", "--jobs="+jobs, "--dbname="+sourceDB, "--file="+dumpDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
