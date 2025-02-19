@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	sourceDB      = ""
-	destinationDB = ""
+	sourceDB      = "your_source_db_connection_string"
+	destinationDB = "your_destination_db_connection_string"
 	jobs          = "4" // Number of parallel jobs for performance
 )
 
@@ -102,25 +102,10 @@ func cleanDestinationDB() error {
 	DO $$ DECLARE
 		r RECORD;
 	BEGIN
-		-- Disable foreign key constraints
 		EXECUTE 'SET session_replication_role = ''replica'';';
-
-		-- Drop all tables
 		FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
 			EXECUTE 'DROP TABLE IF EXISTS public.' || r.tablename || ' CASCADE;';
 		END LOOP;
-
-		-- Drop all sequences
-		FOR r IN (SELECT sequencename FROM pg_sequences WHERE schemaname = 'public') LOOP
-			EXECUTE 'DROP SEQUENCE IF EXISTS public.' || r.sequencename || ' CASCADE;';
-		END LOOP;
-
-		-- Drop all enums
-		FOR r IN (SELECT typname FROM pg_type WHERE typcategory = 'E' AND typnamespace = 'public'::regnamespace) LOOP
-			EXECUTE 'DROP TYPE IF EXISTS public.' || r.typname || ' CASCADE;';
-		END LOOP;
-
-		-- Re-enable foreign key constraints
 		EXECUTE 'SET session_replication_role = ''origin'';';
 	END $$;
 	`
@@ -169,51 +154,25 @@ func disableConstraints() error {
 	return cmd.Run()
 }
 
-// ✅ Step 7: Dump Data (Ensures Backup Directory is Clean)
+// ✅ Step 7: Dump Data
 func dumpData(dumpDir string) error {
 	log.Println("📦 Dumping data only...")
-
-	// Ensure the backup directory does NOT exist before pg_dump runs
-	if _, err := os.Stat(dumpDir); !os.IsNotExist(err) {
-		log.Println("🗑️ Removing backup directory before dumping data...")
-		if err := os.RemoveAll(dumpDir); err != nil {
-			return fmt.Errorf("failed to remove backup directory before data dump: %v", err)
-		}
-	}
-
-	// Run pg_dump after ensuring the directory is deleted
 	cmd := exec.Command("pg_dump", "--format=directory", "--no-owner", "--no-acl", "--data-only", "--jobs="+jobs, "--dbname="+sourceDB, "--file="+dumpDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
+// ✅ Step 8: Restore Data
 func restoreDataWithTransaction(dumpDir string) error {
 	log.Println("🛠️ Restoring data within a transaction...")
-
-	// Start a transaction
-	startTx := exec.Command("psql", destinationDB, "-c", "BEGIN;")
-	startTx.Stdout = os.Stdout
-	startTx.Stderr = os.Stderr
-	if err := startTx.Run(); err != nil {
-		return fmt.Errorf("failed to start transaction: %v", err)
-	}
-
-	// Run pg_restore with --disable-triggers to handle circular constraints
 	restoreCmd := exec.Command("pg_restore", "--disable-triggers", "--jobs="+jobs, "--no-owner", "--no-acl", "--data-only", "--dbname="+destinationDB, dumpDir)
 	restoreCmd.Stdout = os.Stdout
 	restoreCmd.Stderr = os.Stderr
 	if err := restoreCmd.Run(); err != nil {
-		// Rollback if restore fails
-		exec.Command("psql", destinationDB, "-c", "ROLLBACK;").Run()
 		return fmt.Errorf("data restore failed: %v", err)
 	}
-
-	// Commit transaction
-	commitTx := exec.Command("psql", destinationDB, "-c", "COMMIT;")
-	commitTx.Stdout = os.Stdout
-	commitTx.Stderr = os.Stderr
-	return commitTx.Run()
+	return nil
 }
 
 // ✅ Step 9: Re-enable Constraints
