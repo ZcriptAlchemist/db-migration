@@ -94,7 +94,7 @@ func testDBConnection(connStr, dbType string) bool {
 	return true
 }
 
-// ✅ Step 2: Clean the Destination Database
+// ✅ Step 2: Clean the Destination Database.
 func cleanDestinationDB() error {
 	log.Println("🗑️ Cleaning the destination database...")
 
